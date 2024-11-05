@@ -30,3 +30,5 @@ python src/main.py
 ## References
 
 - https://gymnasium.farama.org
+- https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+- https://pytorch.org/tutorials/intermediate/reinforcement_ppo.html

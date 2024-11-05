@@ -1,22 +1,98 @@
 # Entry script for the lunar lander project.
 
 import gymnasium as gym
-import PIL.Image
-import os
+from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+import shutil
+import numpy as np
+
+def extract_pos(obs):
+    """
+    Collect the `x` and `y` of the lunar lander's position from the
+    observation space for the lunar lander.
+    """
+    return np.array([obs[0], obs[1]])
+
+
+def compute_err(location, goal=np.zeros(2)):
+    """
+    Compute the normalized error between the final position (`location`) and a
+    goal position (`goal`).
+
+    The `location` should be a np.array with 2 elements (x and y).
+    """
+    return np.linalg.norm(location - goal)
+
+
+def clean_output(dir='output'):
+    """
+    Removes all contents from the output folder before the next run.
+    """
+    shutil.rmtree(dir)
+    pass
+
+
+def train(env):
+    """
+    Trains the agent for the lunar lander environment.
+    """
+    # TODO: implement
+    pass
+
+
+def eval(env, agent=None, episodes=1, record=True):
+    """
+    Evaluate the agent's performance for the given environment.
+    """
+    if record == True:
+        env = RecordVideo(env, video_folder="output", name_prefix="eval",
+            episode_trigger=lambda x: True)
+    env = RecordEpisodeStatistics(env, buffer_length=episodes)
+
+    for _ in range(episodes):
+        obs, info = env.reset()
+        print('start pos:', extract_pos(obs))
+
+        episode_over = False
+        while not episode_over:
+            if agent == None:
+                # let a random action occur
+                action = env.action_space.sample()
+            else:
+                # TODO implement agent behavior
+                pass
+            obs, reward, terminated, truncated, info = env.step(action)
+            episode_over = terminated or truncated
+            if episode_over == True:
+                final_location = extract_pos(obs)
+                final_vels = (obs[2], obs[3], obs[4])
+                print('landed pos:', extract_pos(obs))
+                print('final vels:', final_vels)
+                print("legs contact:", (obs[6], obs[7]))
+                print("dist err:", compute_err(final_location))
+                pass
+            pass
+    env.close()
+
+    # returns (time taken, total rewards, lengths)
+    return (env.time_queue, env.return_queue, env.length_queue)
+
 
 def main():
-    '''
+    """
     Create the environment, run trials, and record results.
-    '''
+    """
+
+    clean_output()
+
     env = gym.make("LunarLander-v3", continuous=False, gravity=-10.0,
-                enable_wind=False, wind_power=15.0, turbulence_power=1.5,
+                enable_wind=False, wind_power=0.0, turbulence_power=0.0,
                 render_mode='rgb_array')
-    env.reset()
-    # get the first frame
-    img = PIL.Image.fromarray(env.render())
-    # save the image to the file
-    os.makedirs('output', exist_ok=True)
-    img.save('output/frame0.png')
+    
+    (time, rewards, length) = eval(env, agent=None, episodes=1)
+
+    print(f'Episode time taken: {time}')
+    print(f'Episode total rewards: {rewards}')
+    print(f'Episode lengths: {length}')
     pass
 
 
