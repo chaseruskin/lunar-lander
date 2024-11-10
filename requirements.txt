@@ -2,4 +2,5 @@ gymnasium==1.0.0
 swig==4.2.1.post0
 gymnasium[box2d]==1.0.0
 gymnasium[other]==1.0.0
-numpy==1.24.4
+numpy==1.24.3
+torch==2.2.2
