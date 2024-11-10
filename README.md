@@ -10,6 +10,7 @@ The project is organized as follows:
 
 - `/src`: Python scripts for RL experimentation (tracked)
 - `/output`: Run-dependent artifacts that (untracked)
+- `/weights`: Saved weight parameters from trained networks (tracked)
 
 ## Getting Started
 
@@ -25,6 +26,20 @@ pip install -r requirements.txt
 
 ```
 python src/main.py
+```
+
+## Usage
+
+To train the model:
+
+```
+python src/learn.py
+```
+
+To see the trained model in run inference:
+
+```
+python src/infer.py
 ```
 
 ## References
