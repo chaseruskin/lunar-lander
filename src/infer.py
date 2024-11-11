@@ -1,3 +1,5 @@
+# Put a model (hopefully already trained) through inference.
+
 from models import DQN
 import torch
 from lib import Env, Agent, LUNAR_LANDER

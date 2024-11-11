@@ -1,3 +1,5 @@
+# Define the various models used for training and inference.
+
 import torch.nn as nn
 import torch.nn.functional as F
 

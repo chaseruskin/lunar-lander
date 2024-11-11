@@ -1,3 +1,5 @@
+# Supportive classes for RL; namely environments and agents.
+
 import gymnasium as gym
 import torch
 from models import Model
@@ -55,6 +57,7 @@ class Agent:
         self.model.to(self.device)
         # load weights from a file
         if weights != None:
+            print('info: loading weights from file:', self.model.get_filename())
             self.model.load_state_dict(torch.load(weights))
         # set the model to evaluation mode
         self.model.eval()

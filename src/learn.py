@@ -1,3 +1,5 @@
+# Train a model.
+
 import math
 import random
 import matplotlib
@@ -13,15 +15,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-steps_done = 0
-episode_durations = []
-
-# set up matplotlib
-is_ipython = 'inline' in matplotlib.get_backend()
-if is_ipython:
-    from IPython import display
-
-plt.ion()
+STEPS_DONE = 0
+EPISODE_DURATIONS = []
 
 
 class HyperParameters:
@@ -76,11 +71,11 @@ class ReplayMemory(object):
 
 
 def select_action(state, env: Env, policy: Model, hp: HyperParameters, device: str):
-    global steps_done
+    global STEPS_DONE
     sample = random.random()
     eps_threshold = hp.EPS_END + (hp.EPS_START - hp.EPS_END) * \
-        math.exp(-1. * steps_done / hp.EPS_DECAY)
-    steps_done += 1
+        math.exp(-1. * STEPS_DONE / hp.EPS_DECAY)
+    STEPS_DONE += 1
     if sample > eps_threshold:
         with torch.no_grad():
             # t.max(1) will return the largest column value of each row.
@@ -93,7 +88,7 @@ def select_action(state, env: Env, policy: Model, hp: HyperParameters, device: s
 
 def plot_durations(show_result=False):
     plt.figure(1)
-    durations_t = torch.tensor(episode_durations, dtype=torch.float)
+    durations_t = torch.tensor(EPISODE_DURATIONS, dtype=torch.float)
     if show_result:
         plt.title('Result')
     else:
@@ -109,12 +104,6 @@ def plot_durations(show_result=False):
         plt.plot(means.numpy())
 
     plt.pause(0.001)  # pause a bit so that plots are updated
-    if is_ipython:
-        if not show_result:
-            display.display(plt.gcf())
-            display.clear_output(wait=True)
-        else:
-            display.display(plt.gcf())
 
 
 def optimize_model(optimizer, policy: Model, target: Model, memory: ReplayMemory, hp: HyperParameters, device: str):
@@ -206,7 +195,7 @@ def go_train(env: Env, policy: Model, target: Model, hp: HyperParameters, num_ep
             target.load_state_dict(target_net_state_dict)
 
             if done:
-                episode_durations.append(t + 1)
+                EPISODE_DURATIONS.append(t + 1)
                 plot_durations()
                 break
         print('episode:', i_episode, 'reward:', i_reward)
@@ -226,6 +215,8 @@ def train(env, model: Model, hp: HyperParameters, episodes: int):
     - `episodes`: the total number of episodes to run
     """
 
+    plt.ion()
+
     device = torch.device(
         "cuda" if torch.cuda.is_available() else
         "mps" if torch.backends.mps.is_available() else
@@ -239,13 +230,15 @@ def train(env, model: Model, hp: HyperParameters, episodes: int):
     target.load_state_dict(policy.state_dict())
 
     policy_after_training = go_train(env, policy, target, hp, episodes, device)
+    print('info: training finished')
 
     torch.save(policy_after_training.state_dict(), policy_after_training.get_filename())
+    print('info: weights saved to file:', policy.get_filename())
 
-    print('Complete')
     plot_durations(show_result=True)
     plt.ioff()
     plt.show()
+    pass
 
 
 def main():
