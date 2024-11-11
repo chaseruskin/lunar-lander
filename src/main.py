@@ -2,6 +2,7 @@
 
 import gymnasium as gym
 from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+from gymnasium.utils.play import play
 import shutil
 import numpy as np
 
@@ -76,6 +77,45 @@ def eval(env, agent=None, episodes=1, record=True):
     # returns (time taken, total rewards, lengths)
     return (env.time_queue, env.return_queue, env.length_queue)
 
+class RewardWrapper(gym.Wrapper):
+
+    def reset(self, **kwargs):
+        # Call the original reset function and get the observation and info
+        observation, info = super().reset(**kwargs)
+
+        self.episode_reward = 0
+        self.episode_length = 0
+        
+        return observation, info
+    
+    def step(self, action):
+        # Call the original step function and get the observation and info
+        observation, reward, terminated, truncated, info = super().step(action)
+        episode_over = terminated or truncated
+        
+        self.episode_reward += reward
+        self.episode_length += 1
+
+        if episode_over:
+            print("Episode Reward: "+ str(self.episode_reward))
+            print("Distance From Goal " + str(compute_err(observation[:2])))
+            print("Steps Taken: " + str(self.episode_length))
+            print()
+        
+        return observation, reward, terminated, truncated, info
+
+def human_input():
+    play(RewardWrapper(gym.make("LunarLander-v3", continuous=True, render_mode="rgb_array")),
+    keys_to_action={
+        " ": np.array([1, 0], dtype=np.float32),
+        "a": np.array([-1, -1], dtype=np.float32),
+        "d": np.array([-1, 1], dtype=np.float32),
+        "a ": np.array([1, -1], dtype=np.float32),
+        "d ": np.array([1, 1], dtype=np.float32),
+    },
+    noop=np.array([-1, 0], dtype=np.float32)
+)
+
 
 def main():
     """
@@ -98,3 +138,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+    # DANIEL EXAMPLE
+    human_input()
