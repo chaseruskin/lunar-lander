@@ -2,18 +2,17 @@
 
 import math
 import random
-import matplotlib
 import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
-
-from models import Model, DQN
 from copy import copy
-from lib import Env, LUNAR_LANDER
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+from models import Model, DQN
+from lib import Env, LUNAR_LANDER
 
 STEPS_DONE = 0
 EPISODE_DURATIONS = []
