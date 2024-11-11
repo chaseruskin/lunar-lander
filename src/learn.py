@@ -1,6 +1,7 @@
 # Train a model.
 
 import math
+import time
 import random
 import matplotlib.pyplot as plt
 from collections import namedtuple, deque
@@ -95,6 +96,7 @@ class Trainer:
 
         self.steps_done = 0
         self.episode_durations = []
+        self.episode_rewards = []
 
         print('info: training on device:', self.device)
         
@@ -149,8 +151,10 @@ class Trainer:
 
                 if done:
                     self.episode_durations.append(t + 1)
+                    self.episode_rewards.append(i_reward)
                     if self.visualize == True:
                         self.plot_durations()
+                        self.plot_rewards()
                     break
             print('episode:', i_episode, 'reward:', i_reward)
             pass
@@ -230,12 +234,39 @@ class Trainer:
             plt.title('Training...')
         plt.xlabel('Episode')
         plt.ylabel('Duration')
+        plt.grid(True)
+        plt.legend(['Duration', '100 episode average'])
         plt.plot(durations_t.numpy())
         # Take 100 episode averages and plot them too
         if len(durations_t) >= 100:
             means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
             means = torch.cat((torch.zeros(99), means))
             plt.plot(means.numpy())
+
+        plt.pause(0.001)  # pause a bit so that plots are updated
+        if show_result == True:
+            if self.visualize == True:
+                plt.ioff()
+            plt.show()
+        
+    def plot_rewards(self, show_result=False):
+        plt.figure(2)
+        rewards_t = torch.tensor(self.episode_rewards, dtype=torch.float)
+        if show_result:
+            plt.title('Result')
+        else:
+            plt.clf()
+            plt.title('Training...')
+        plt.xlabel('Episode')
+        plt.ylabel('Reward')
+        plt.grid(True)
+        plt.legend(['Reward', '100 episode average'])
+        plt.plot(rewards_t.numpy())
+        # Take 100 episode averages and plot them too
+        if len(rewards_t) >= 100:
+            means_r = rewards_t.unfold(0, 100, 1).mean(1).view(-1)
+            means_r = torch.cat((torch.zeros(99), means_r))
+            plt.plot(means_r.numpy())
 
         plt.pause(0.001)  # pause a bit so that plots are updated
         if show_result == True:
@@ -249,7 +280,7 @@ class Trainer:
 def main():    
     # determine how long we should train for
     if torch.cuda.is_available() or torch.backends.mps.is_available():
-        episodes = 600
+        episodes = 800
     else:
         episodes = 10
 
@@ -272,8 +303,11 @@ def main():
     print('info: weights saved to file:', policy.get_filename())
 
     trainer.plot_durations(show_result=True)
+    trainer.plot_rewards(show_result=True)
     pass
 
 
 if __name__ == '__main__':
+    start = time.time()
     main()
+    print('Time Elapsed for Training:' + str(time.time() - start))  
