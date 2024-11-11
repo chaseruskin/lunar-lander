@@ -14,8 +14,7 @@ import torch.optim as optim
 from models import Model, DQN
 from lib import Env, LUNAR_LANDER
 
-STEPS_DONE = 0
-EPISODE_DURATIONS = []
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 
 class HyperParameters:
@@ -49,7 +48,6 @@ class HyperParameters:
     
     pass
 
-Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 class ReplayMemory(object):
 
@@ -69,191 +67,211 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-def select_action(state, env: Env, policy: Model, hp: HyperParameters, device: str):
-    global STEPS_DONE
-    sample = random.random()
-    eps_threshold = hp.EPS_END + (hp.EPS_START - hp.EPS_END) * \
-        math.exp(-1. * STEPS_DONE / hp.EPS_DECAY)
-    STEPS_DONE += 1
-    if sample > eps_threshold:
-        with torch.no_grad():
-            # t.max(1) will return the largest column value of each row.
-            # second column on max result is index of where max element was
-            # found, so we pick action with the larger expected reward.
-            return policy(state).max(1).indices.view(1, 1)
-    else:
-        return torch.tensor([[env.env.action_space.sample()]], device=device, dtype=torch.long)
+class Trainer:
 
+    def __init__(self, env: Env, model: Model, hp: HyperParameters, visualize: bool=True):
+        """
+        Initialize a trainer for the model in the particular environment.
 
-def plot_durations(show_result=False):
-    plt.figure(1)
-    durations_t = torch.tensor(EPISODE_DURATIONS, dtype=torch.float)
-    if show_result:
-        plt.title('Result')
-    else:
-        plt.clf()
-        plt.title('Training...')
-    plt.xlabel('Episode')
-    plt.ylabel('Duration')
-    plt.plot(durations_t.numpy())
-    # Take 100 episode averages and plot them too
-    if len(durations_t) >= 100:
-        means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
+        ### Args
+        - `env`: the environment to train in
+        - `model`: the model to be trained
+        - `hp`: the set of hyperparameters
+        - `episodes`: the total number of episodes to run
+        - `visualize`: choose whether to plot the data as it trains
+        """
+        if visualize == True:
+            plt.ion()
 
-    plt.pause(0.001)  # pause a bit so that plots are updated
+        self.hp = hp
+        self.visualize = visualize
+        self.env = env
 
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else
+            "mps" if torch.backends.mps.is_available() else
+            "cpu"
+        )
 
-def optimize_model(optimizer, policy: Model, target: Model, memory: ReplayMemory, hp: HyperParameters, device: str):
-    if len(memory) < hp.BATCH_SIZE:
-        return
-    transitions = memory.sample(hp.BATCH_SIZE)
-    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
-    # detailed explanation). This converts batch-array of Transitions
-    # to Transition of batch-arrays.
-    batch = Transition(*zip(*transitions))
+        self.steps_done = 0
+        self.episode_durations = []
 
-    # Compute a mask of non-final states and concatenate the batch elements
-    # (a final state would've been the one after which simulation ended)
-    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                          batch.next_state)), device=device, dtype=torch.bool)
-    non_final_next_states = torch.cat([s for s in batch.next_state
-                                                if s is not None])
-    state_batch = torch.cat(batch.state)
-    action_batch = torch.cat(batch.action)
-    reward_batch = torch.cat(batch.reward)
-
-    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-    # columns of actions taken. These are the actions which would've been taken
-    # for each batch state according to policy_net
-    state_action_values = policy(state_batch).gather(1, action_batch)
-
-    # Compute V(s_{t+1}) for all next states.
-    # Expected values of actions for non_final_next_states are computed based
-    # on the "older" target_net; selecting their best reward with max(1).values
-    # This is merged based on the mask, such that we'll have either the expected
-    # state value or 0 in case the state was final.
-    next_state_values = torch.zeros(hp.BATCH_SIZE, device=device)
-    with torch.no_grad():
-        next_state_values[non_final_mask] = target(non_final_next_states).max(1).values
-    # Compute the expected Q values
-    expected_state_action_values = (next_state_values * hp.GAMMA) + reward_batch
-
-    # Compute Huber loss
-    criterion = nn.SmoothL1Loss()
-    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
-
-    # Optimize the model
-    optimizer.zero_grad()
-    loss.backward()
-    # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy.parameters(), 100)
-    optimizer.step()
-
-
-def go_train(env: Env, policy: Model, target: Model, hp: HyperParameters, num_episodes: int, device: str):
-
-    optimizer = optim.AdamW(policy.parameters(), lr=hp.LR, amsgrad=True)
-    memory = ReplayMemory(10000)
-
-    for i_episode in range(num_episodes):
-        # Initialize the environment and get its state
-        state, info = env.reset()
+        print('info: training on device:', self.device)
         
-        i_reward = 0
-        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-
-        for t in count():
-            action = select_action(state, env, policy, hp, device)
-            observation, reward, terminated, truncated, info = env.step(action.item())
-            i_reward += reward
-            reward = torch.tensor([reward], device=device)
-            done = terminated or truncated
-
-            if terminated:
-                next_state = None
-            else:
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-
-            # Store the transition in memory
-            memory.push(state, action, next_state, reward)
-
-            # Move to the next state
-            state = next_state
-
-            # Perform one step of the optimization (on the policy network)
-            optimize_model(optimizer, policy, target, memory, hp, device)
-
-            # Soft update of the target network's weights
-            # θ′ ← τ θ + (1 −τ )θ′
-            target_net_state_dict = target.state_dict()
-            policy_net_state_dict = policy.state_dict()
-            for key in policy_net_state_dict:
-                target_net_state_dict[key] = policy_net_state_dict[key]*hp.TAU + target_net_state_dict[key]*(1-hp.TAU)
-            target.load_state_dict(target_net_state_dict)
-
-            if done:
-                EPISODE_DURATIONS.append(t + 1)
-                plot_durations()
-                break
-        print('episode:', i_episode, 'reward:', i_reward)
+        self.policy = copy(model).to(self.device)
+        self.target = copy(model).to(self.device)
+        self.target.load_state_dict(self.policy.state_dict())
         pass
-    return policy
 
+    def train(self, n: int):
+        """
+        Undergo training for `n` episodes.
+        """
 
+        optimizer = optim.AdamW(self.policy.parameters(), lr=self.hp.LR, amsgrad=True)
+        memory = ReplayMemory(10_000)
 
-def train(env, model: Model, hp: HyperParameters, episodes: int):
-    """
-    Train the model.
+        for i_episode in range(n):
+            # Initialize the environment and get its state
+            state, info = self.env.reset()
+            
+            i_reward = 0
+            state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
 
-    ### Args
-    - `env`: the environment to train in
-    - `model`: the model to be trained
-    - `hp`: the set of hyperparameters
-    - `episodes`: the total number of episodes to run
-    """
+            for t in count():
+                action = self.select_action(state)
+                observation, reward, terminated, truncated, info = self.env.step(action.item())
+                i_reward += reward
+                reward = torch.tensor([reward], device=self.device)
+                done = terminated or truncated
 
-    plt.ion()
+                if terminated:
+                    next_state = None
+                else:
+                    next_state = torch.tensor(observation, dtype=torch.float32, device=self.device).unsqueeze(0)
 
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() else
-        "mps" if torch.backends.mps.is_available() else
-        "cpu"
-    )
+                # Store the transition in memory
+                memory.push(state, action, next_state, reward)
 
-    print('info: training on device:', device)
-    
-    policy = copy(model).to(device)
-    target = copy(model).to(device)
-    target.load_state_dict(policy.state_dict())
+                # Move to the next state
+                state = next_state
 
-    policy_after_training = go_train(env, policy, target, hp, episodes, device)
-    print('info: training finished')
+                # Perform one step of the optimization (on the policy network)
+                self.optimize_model(optimizer, memory)
 
-    torch.save(policy_after_training.state_dict(), policy_after_training.get_filename())
-    print('info: weights saved to file:', policy.get_filename())
+                # Soft update of the target network's weights
+                # θ′ ← τ θ + (1 −τ )θ′
+                target_net_state_dict = self.target.state_dict()
+                policy_net_state_dict = self.policy.state_dict()
+                for key in policy_net_state_dict:
+                    target_net_state_dict[key] = policy_net_state_dict[key]*self.hp.TAU + target_net_state_dict[key]*(1-self.hp.TAU)
+                self.target.load_state_dict(target_net_state_dict)
 
-    plot_durations(show_result=True)
-    plt.ioff()
-    plt.show()
+                if done:
+                    self.episode_durations.append(t + 1)
+                    if self.visualize == True:
+                        self.plot_durations()
+                    break
+            print('episode:', i_episode, 'reward:', i_reward)
+            pass
+        return self.policy
+
+    def select_action(self, state):
+        """
+        Choose the next action during within the current training episode.
+        """
+        sample = random.random()
+        eps_threshold = self.hp.EPS_END + (self.hp.EPS_START - self.hp.EPS_END) * \
+            math.exp(-1. * self.steps_done / self.hp.EPS_DECAY)
+        self.steps_done += 1
+        if sample > eps_threshold:
+            with torch.no_grad():
+                # t.max(1) will return the largest column value of each row.
+                # second column on max result is index of where max element was
+                # found, so we pick action with the larger expected reward.
+                return self.policy(state).max(1).indices.view(1, 1)
+        else:
+            return torch.tensor([[self.env.env.action_space.sample()]], device=self.device, dtype=torch.long)
+        pass
+
+    def optimize_model(self, optimizer, memory: ReplayMemory):
+        if len(memory) < self.hp.BATCH_SIZE:
+            return
+        transitions = memory.sample(self.hp.BATCH_SIZE)
+        # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+        # detailed explanation). This converts batch-array of Transitions
+        # to Transition of batch-arrays.
+        batch = Transition(*zip(*transitions))
+
+        # Compute a mask of non-final states and concatenate the batch elements
+        # (a final state would've been the one after which simulation ended)
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                            batch.next_state)), device=self.device, dtype=torch.bool)
+        non_final_next_states = torch.cat([s for s in batch.next_state
+                                                    if s is not None])
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
+
+        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+        # columns of actions taken. These are the actions which would've been taken
+        # for each batch state according to policy_net
+        state_action_values = self.policy(state_batch).gather(1, action_batch)
+
+        # Compute V(s_{t+1}) for all next states.
+        # Expected values of actions for non_final_next_states are computed based
+        # on the "older" target_net; selecting their best reward with max(1).values
+        # This is merged based on the mask, such that we'll have either the expected
+        # state value or 0 in case the state was final.
+        next_state_values = torch.zeros(self.hp.BATCH_SIZE, device=self.device)
+        with torch.no_grad():
+            next_state_values[non_final_mask] = self.target(non_final_next_states).max(1).values
+        # Compute the expected Q values
+        expected_state_action_values = (next_state_values * self.hp.GAMMA) + reward_batch
+
+        # Compute Huber loss
+        criterion = nn.SmoothL1Loss()
+        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        # Optimize the model
+        optimizer.zero_grad()
+        loss.backward()
+        # In-place gradient clipping
+        torch.nn.utils.clip_grad_value_(self.policy.parameters(), 100)
+        optimizer.step()
+
+    def plot_durations(self, show_result=False):
+        plt.figure(1)
+        durations_t = torch.tensor(self.episode_durations, dtype=torch.float)
+        if show_result:
+            plt.title('Result')
+        else:
+            plt.clf()
+            plt.title('Training...')
+        plt.xlabel('Episode')
+        plt.ylabel('Duration')
+        plt.plot(durations_t.numpy())
+        # Take 100 episode averages and plot them too
+        if len(durations_t) >= 100:
+            means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
+            means = torch.cat((torch.zeros(99), means))
+            plt.plot(means.numpy())
+
+        plt.pause(0.001)  # pause a bit so that plots are updated
+        if show_result == True:
+            if self.visualize == True:
+                plt.ioff()
+            plt.show()
+
     pass
 
 
-def main():
+def main():    
     # determine how long we should train for
     if torch.cuda.is_available() or torch.backends.mps.is_available():
         episodes = 600
     else:
         episodes = 10
+
     # configure the hyper parameters for training
     hp = HyperParameters()
     # initialize the environment
     env = Env(LUNAR_LANDER)
     # create the model we wish to train
     model = DQN(*env.get_space())
+
+    # set up the trainer
+    trainer = Trainer(env, model, hp, visualize=True)
+
     # train the model!
-    train(env, model, hp, episodes)
+    policy = trainer.train(episodes)
+    print('info: training finished')
+
+    # save the weights
+    policy.save()
+    print('info: weights saved to file:', policy.get_filename())
+
+    trainer.plot_durations(show_result=True)
     pass
 
 

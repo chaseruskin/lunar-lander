@@ -1,6 +1,7 @@
 # Define the various models used for training and inference.
 
 import torch.nn as nn
+import torch
 import torch.nn.functional as F
 
 # ==========
@@ -37,6 +38,13 @@ class Model(nn.Module):
         Returns the file name of the given model.
         """
         return 'weights' + '/' + self.get_name() + ".pth"
+    
+    def save(self):
+        """
+        Write the model's weights to a file.
+        """
+        torch.save(self.state_dict(), self.get_filename())
+        pass
 
 
 # =========
