@@ -295,12 +295,14 @@ def main():
     trainer = Trainer(env, model, hp, visualize=True)
 
     # train the model!
+    start = time.time()
     policy = trainer.train(episodes)
     print('info: training finished')
+    print('info: time elapsed for training:', str(time.time() - start), 's')  
 
     # save the weights
     policy.save()
-    print('info: weights saved to file:', policy.get_filename())
+    print('info: weights saved to file:', '\"' + str(policy.get_filename()) + '\"')
 
     trainer.plot_durations(show_result=True)
     trainer.plot_rewards(show_result=True)
@@ -308,6 +310,4 @@ def main():
 
 
 if __name__ == '__main__':
-    start = time.time()
     main()
-    print('Time Elapsed for Training:' + str(time.time() - start))  
