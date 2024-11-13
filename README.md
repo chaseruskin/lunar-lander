@@ -10,6 +10,7 @@ The project is organized as follows:
 
 - `/src`: Python scripts for RL experimentation (tracked)
 - `/output`: Run-dependent artifacts that (untracked)
+- `/data`: Plots and statistics regarding our experiments (tracked)
 - `/weights`: Saved weight parameters from trained networks (tracked)
 
 ## Getting Started
@@ -36,10 +37,16 @@ To train the model:
 python src/learn.py
 ```
 
-To see the trained model in run inference:
+To see the trained model run inference:
 
 ```
 python src/infer.py
+```
+
+To manually maneuver the lander using the keyboard:
+
+```
+python src/play.py
 ```
 
 ## References

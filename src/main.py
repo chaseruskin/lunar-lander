@@ -116,7 +116,6 @@ def human_input():
     noop=np.array([-1, 0], dtype=np.float32)
 )
 
-
 def main():
     """
     Create the environment, run trials, and record results.
@@ -137,7 +136,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
 
     # DANIEL EXAMPLE
     human_input()
