@@ -53,7 +53,7 @@ class RewardWrapper(gym.Wrapper):
 def main():
     play(RewardWrapper(gym.make("LunarLander-v3", continuous=True, render_mode="rgb_array")),
         keys_to_action={
-            " ": np.array([1, 0], dtype=np.float32),
+            "w": np.array([1, 0], dtype=np.float32),
             "a": np.array([-1, -1], dtype=np.float32),
             "d": np.array([-1, 1], dtype=np.float32),
             "a ": np.array([1, -1], dtype=np.float32),
