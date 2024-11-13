@@ -12,6 +12,7 @@ class Model(nn.Module):
     
     def __init__(self):
         super(Model, self).__init__()
+        self.name = 'model'
 
     def extract_model_data(self):
         """
@@ -31,7 +32,7 @@ class Model(nn.Module):
         """
         Return the name of this model.
         """
-        return 'dqn' + self.extract_model_data()
+        return self.name + self.extract_model_data()
     
     def get_filename(self):
         """
@@ -63,6 +64,7 @@ class DQN(Model):
         - `n_actions`: number of output actions
         """
         super(DQN, self).__init__()
+        self.name = 'dqn'
         self.layer1 = nn.Linear(n_observations, 128)
         self.layer2 = nn.Linear(128, 128)
         # self.layer3 = nn.ReLU()
