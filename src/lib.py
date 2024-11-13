@@ -58,7 +58,7 @@ class Agent:
         # load weights from a file
         if weights != None:
             print('info: loading weights from file:', self.model.get_filename())
-            self.model.load_state_dict(torch.load(weights))
+            self.model.load_state_dict(torch.load(weights, map_location=torch.device(self.device)))
         # set the model to evaluation mode
         self.model.eval()
         pass
