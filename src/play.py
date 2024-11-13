@@ -1,3 +1,4 @@
+# Play as the lunar lander within the environment using the keyboard.
 
 import gymnasium as gym
 from gymnasium.utils.play import play
