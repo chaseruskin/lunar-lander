@@ -1,5 +1,6 @@
 # Play as the lunar lander within the environment using the keyboard.
 
+import argparse
 import gymnasium as gym
 from gymnasium.utils.play import play
 import numpy as np
@@ -25,7 +26,7 @@ def compute_err(location, goal=np.zeros(2)):
 class RewardWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
-        # Call the original reset function and get the observation and info
+        # Call the original reset function
         observation, info = super().reset(**kwargs)
 
         self.episode_reward = 0
@@ -34,7 +35,7 @@ class RewardWrapper(gym.Wrapper):
         return observation, info
     
     def step(self, action):
-        # Call the original step function and get the observation and info
+        # Call the original step function
         observation, reward, terminated, truncated, info = super().step(action)
         episode_over = terminated or truncated
         
@@ -48,20 +49,44 @@ class RewardWrapper(gym.Wrapper):
             print()
         
         return observation, reward, terminated, truncated, info
+    
+
+def play_discrete():
+    play(RewardWrapper(gym.make("LunarLander-v3", continuous=False, render_mode="rgb_array")),  
+         keys_to_action={
+             " ": 2,
+             "w": 2,
+             "a": 1,
+             "d": 3,
+             },
+         noop=0
+)
 
 
-def main():
+def play_continuous():
     play(RewardWrapper(gym.make("LunarLander-v3", continuous=True, render_mode="rgb_array")),
-        keys_to_action={
-            "w": np.array([1, 0], dtype=np.float32),
-            "a": np.array([-1, -1], dtype=np.float32),
-            "d": np.array([-1, 1], dtype=np.float32),
-            "a ": np.array([1, -1], dtype=np.float32),
-            "d ": np.array([1, 1], dtype=np.float32),
-        },
-        noop=np.array([-1, 0], dtype=np.float32)
+         keys_to_action={
+             " ": np.array([1, 0], dtype=np.float32),
+             "w": np.array([1, 0], dtype=np.float32),
+             "a": np.array([-1, -1], dtype=np.float32),
+             "d": np.array([-1, 1], dtype=np.float32),
+             "a ": np.array([1, -1], dtype=np.float32),
+             "d ": np.array([1, 1], dtype=np.float32),
+             "aw": np.array([1, -1], dtype=np.float32),
+             "dw": np.array([1, 1], dtype=np.float32),
+             },
+         noop=np.array([-1, 0], dtype=np.float32)
     )
     
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action_space", type=str, help="continuous or discrete")
+    args = parser.parse_args()
+
+    if args.action_space == 'continuous':
+        play_continuous()
+    elif args.action_space == 'discrete':
+        play_discrete()
+    else:
+        print("Please choose either \'continuous\' or \'discrete\' for the action space.")

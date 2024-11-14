@@ -46,7 +46,7 @@ python src/infer.py
 To manually maneuver the lander using the keyboard:
 
 ```
-python src/play.py
+python src/play.py [continuous, discrete]
 ```
 
 ## References
