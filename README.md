@@ -2,7 +2,7 @@
 
 #### Authors: Daniel Skora, Nihal Simha, Chase Ruskin
 
-Final project for University of Michigan's CSE591: Foundations of AI. The goal of this project is to apply reinforcement learning (RL) methodologies to solving the lunar landing problem for generalized environments.
+Final project for University of Michigan's CSE592: Foundations of AI. The goal of this project is to apply reinforcement learning (RL) methodologies to solving the lunar landing problem for generalized environments.
 
 ## Project Organization
 
