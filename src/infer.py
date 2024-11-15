@@ -25,14 +25,27 @@ def run_episode(env: Env, agent: Agent):
 
 def main():
     # determine the environment
-    env = Env(LUNAR_LANDER, 'human')
+    env = Env(LUNAR_LANDER, None)
     # create the model
     model = DQN(*env.get_space())
     # initalize the agent
     agent = Agent(model, weights=model.get_filename())
     # run an episode
-    reward = run_episode(env, agent)
-    print('episode: 0', 'reward:', reward)
+    rewards = []
+    avg = 0.0
+    TRIALS = 1000
+    for i in range(TRIALS):
+        reward = run_episode(env, agent)
+        rewards += [reward]
+        print('episode:', i, 'reward:', reward)
+        avg += reward
+
+    print('average:', avg/TRIALS)
+
+
+    with open("output/rewards.txt", 'w') as fd:
+        for i in rewards:
+            fd.write(str(i) + '\n')
     pass
 
 
