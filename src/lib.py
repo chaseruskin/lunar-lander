@@ -57,7 +57,7 @@ class Agent:
         self.model.to(self.device)
         # load weights from a file
         if weights != None:
-            print('info: loading weights from file:', self.model.get_filename())
+            print('info: loading weights from file:', weights)
             self.model.load_state_dict(torch.load(weights, map_location=torch.device(self.device)))
         # set the model to evaluation mode
         self.model.eval()
@@ -68,7 +68,11 @@ class Agent:
         Select the next best action according the agent's policy.
         """
         state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
-        action = self.model(state).argmax().item()
+        # print(self.model, self.model(state))
+        sel = self.model(state)
+        if type(sel) == tuple:
+            sel = sel[0]
+        action = sel.argmax().item()
         return action
 
     pass

@@ -4,3 +4,4 @@ gymnasium[box2d]==1.0.0
 gymnasium[other]==1.0.0
 numpy==1.24.3
 torch==2.2.2
+torchrl==0.3.1

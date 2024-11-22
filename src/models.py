@@ -3,6 +3,7 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
+from tensordict.nn.distributions import NormalParamExtractor
 
 # ==========
 # Base Model
@@ -24,8 +25,14 @@ class Model(nn.Module):
         keys = list(book)[1:]
         for k in keys:
             l = book[k]
-            data += str(l.in_features) + 'x'
-        data += str(l.out_features)
+            try:
+                data += str(l.in_features) + 'x'
+            except:
+                pass
+        try:
+            data += str(l.out_features)
+        except:
+            data += '4'
         return data
 
     def get_name(self):
@@ -88,4 +95,27 @@ class DQN(Model):
 # PPO Model
 # =========
 
-# TODO: define and implement
+class PPO(Model):
+
+    def __init__(self, num_cells: int, n_observations: int, n_actions: int):
+        super(PPO, self).__init__()
+        self.name = 'ppo'
+        # self.layer1 = nn.Linear(n_observations, 256)
+        # self.layer2 = nn.Linear(256, 256)
+        # self.layer3 = nn.Linear(256, 256)
+        # self.layer4 = nn.Linear(256, n_actions)
+        
+        self.net = nn.Sequential(
+            nn.LazyLinear(num_cells),
+            nn.Tanh(),
+            nn.LazyLinear(num_cells),
+            nn.Tanh(),
+            nn.LazyLinear(num_cells),
+            nn.Tanh(),
+            nn.LazyLinear(2*n_actions),
+            NormalParamExtractor(),
+        )
+        pass
+
+    def forward(self, x):
+        return self.net.forward(x)
