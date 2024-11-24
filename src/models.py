@@ -3,7 +3,6 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-from tensordict.nn.distributions import NormalParamExtractor
 
 # ==========
 # Base Model
@@ -72,6 +71,7 @@ class DQN(Model):
         """
         super(DQN, self).__init__()
         self.name = 'dqn'
+
         self.layer1 = nn.Linear(n_observations, 128)
         self.layer2 = nn.Linear(128, 128)
         self.layer3 = nn.Linear(128, n_actions)
@@ -97,25 +97,21 @@ class DQN(Model):
 
 class PPO(Model):
 
-    def __init__(self, num_cells: int, n_observations: int, n_actions: int):
+    def __init__(self, n_hidden_dims: int, n_observations: int, n_actions: int, dropout: float):
         super(PPO, self).__init__()
         self.name = 'ppo'
-        # self.layer1 = nn.Linear(n_observations, 256)
-        # self.layer2 = nn.Linear(256, 256)
-        # self.layer3 = nn.Linear(256, 256)
-        # self.layer4 = nn.Linear(256, n_actions)
-        
-        self.net = nn.Sequential(
-            nn.LazyLinear(num_cells),
-            nn.Tanh(),
-            nn.LazyLinear(num_cells),
-            nn.Tanh(),
-            nn.LazyLinear(num_cells),
-            nn.Tanh(),
-            nn.LazyLinear(2*n_actions),
-            NormalParamExtractor(),
-        )
+
+        self.layer1 = nn.Linear(n_observations, n_hidden_dims)
+        self.layer2 = nn.Linear(n_hidden_dims, n_hidden_dims)
+        self.layer3 = nn.Linear(n_hidden_dims, n_actions)
+        self.dropout = nn.Dropout(dropout)
         pass
 
     def forward(self, x):
-        return self.net.forward(x)
+        x = F.relu(self.layer1(x))
+        x = self.dropout(x)
+        x = F.relu(self.layer2(x))
+        x = self.dropout(x)
+        return self.layer3(x)
+    
+    pass

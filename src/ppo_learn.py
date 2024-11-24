@@ -1,278 +1,221 @@
 import warnings
 warnings.filterwarnings("ignore")
-from torch import multiprocessing
 
-from collections import defaultdict
-
-import matplotlib.pyplot as plt
+import torch.nn.functional as F
 import torch
-from tensordict.nn import TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
-from torchrl.collectors import SyncDataCollector
-from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import (Compose, DoubleToFloat, ObservationNorm, StepCounter,
-                          TransformedEnv)
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import ClipPPOLoss
-from torchrl.objectives.value import GAE
-from tqdm import tqdm
-
-
-from lib import LUNAR_LANDER
+import torch.nn as nn
 from models import PPO
+from torch import distributions
+import matplotlib.pyplot as plt
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+from lib import Env, LUNAR_LANDER
+
+def calculate_returns(rewards, gamma):
+    returns = []
+    cumulative_reward = 0
+    for r in reversed(rewards):
+        cumulative_reward = r + gamma*cumulative_reward
+        returns.insert(0, cumulative_reward)
+    returns = torch.tensor(returns)
+    # normalize
+    returns = (returns - returns.mean()) / returns.std()
+    return returns
+
+
+def calculate_advantages(returns, values):
+    advantages = returns.unsqueeze(1) - values
+    # normalize
+    advantages = (advantages - advantages.mean()) / advantages.std()
+    return advantages
+
+
+def calculate_surrogate_loss(act_log_prob_old, act_log_prob_new, epsilon, advantages):
+    advantages = advantages.detach()
+
+    policy_ratio = (act_log_prob_new - act_log_prob_old).exp()
+    try:
+        surrogate_loss_1 = policy_ratio.unsqueeze(1) * advantages
+    except:
+        print(policy_ratio)
+        print(advantages)
+        exit(101)
+    surrogate_loss_2 = torch.clamp(policy_ratio.unsqueeze(1), min=1.0-epsilon, max=1.0+epsilon) * advantages
+    surrogate_loss = torch.min(surrogate_loss_1, surrogate_loss_2)
+    return surrogate_loss
+
+
+def calculate_losses(surrogate_loss, entropy, entropy_coeff, returns, value_pred):
+    entropy_bonus = entropy_coeff * entropy
+    policy_loss = -(surrogate_loss + entropy_bonus.unsqueeze(1)).sum()
+    value_loss = F.smooth_l1_loss(returns.unsqueeze(1), value_pred).sum()
+    return policy_loss, value_loss
+
+
+class ActorCritic(nn.Module):
+    def __init__(self, actor, critic):
+        super().__init__()
+        self.actor = actor
+        self.critic = critic
+
+    def forward(self, state):
+        action_pred = self.actor(state)
+        value_pred = self.critic(state)
+        return action_pred, value_pred
+
+
+def forward_pass(env: Env, agent, gamma):
+    states = []
+    actions = []
+    act_log_prob = []
+    values = []
+    rewards = []
+    done = False
+    episode_reward = 0
+
+    device = 'cpu'
+
+    state, info = env.reset()
+    agent.train()
+    while done == False:
+       
+        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        states.append(state)
+        action_pred, value_pred = agent(state)
+        # print(action_pred, value_pred)
+        action_prob = F.softmax(action_pred, dim=-1)
+        dist = distributions.Categorical(action_prob)
+        action = dist.sample()
+        log_prob_action = dist.log_prob(action)
+        state, reward, done, truncated, info = env.step(action.item())
+        # print(action, reward)
+        # update lists that record the data of the episode
+        actions.append(action)
+        act_log_prob.append(log_prob_action)
+        values.append(value_pred)
+        rewards.append(reward)
+        episode_reward += reward
+        pass
+    # concatenate each iteration's item into a single vector/dimension
+    states = torch.cat(states)
+    actions = torch.cat(actions)
+    act_log_prob = torch.cat(act_log_prob)
+    values = torch.cat(values).squeeze(-1)
+    returns = calculate_returns(rewards, gamma=gamma)
+    advantages = calculate_advantages(returns, values)
+    return episode_reward, states, actions, act_log_prob, advantages, returns
+
+
+def update_policy(agent, states, actions, act_log_prob_old, advantages, returns, optimizer, ppo_steps, epsilon, entropy_coeff):
+    BATCH_SIZE = 128
+    total_policy_loss = 0
+    total_value_loss = 0
+    actions_log_probability_old = act_log_prob_old.detach()
+    actions = actions.detach()
+    training_results_dataset = TensorDataset(states, actions, actions_log_probability_old, advantages, returns)
+    batch_dataset = DataLoader(training_results_dataset, batch_size=BATCH_SIZE, shuffle=False)
+
+    for _ in range(ppo_steps):
+        for batch_idx, (states, actions, actions_log_probability_old, advantages, returns) in enumerate(batch_dataset):
+            # get new log prob of actions for all input states
+            action_pred, value_pred = agent(states)
+            value_pred = value_pred
+            action_prob = F.softmax(action_pred, dim=-1)
+            probability_distribution_new = distributions.Categorical(action_prob)
+            entropy = probability_distribution_new.entropy()
+            # estimate new log probabilities using old actions
+            actions_log_probability_new = probability_distribution_new.log_prob(actions)
+            surrogate_loss = calculate_surrogate_loss(actions_log_probability_old, actions_log_probability_new, epsilon, advantages)
+            policy_loss, value_loss = calculate_losses(surrogate_loss, entropy, entropy_coeff, returns, value_pred)
+            optimizer.zero_grad()
+            policy_loss.backward()
+            value_loss.backward()
+            optimizer.step()
+            total_policy_loss += policy_loss.item()
+            total_value_loss += value_loss.item()
+        pass
+    return total_policy_loss / ppo_steps, total_value_loss / ppo_steps
+
+
+def plot_train_rewards(train_rewards, reward_threshold):
+    plt.figure(figsize=(12, 8))
+    plt.plot(train_rewards, label='Training Reward')
+    plt.xlabel('Episode', fontsize=20)
+    plt.ylabel('Training Reward', fontsize=20)
+    plt.hlines(reward_threshold, 0, len(train_rewards), color='y')
+    plt.legend(loc='lower right')
+    plt.grid()
+    plt.show()
+
+def plot_losses(policy_losses, value_losses):
+    plt.figure(figsize=(12, 8))
+    plt.plot(value_losses, label='Value Losses')
+    plt.plot(policy_losses, label='Policy Losses')
+    plt.xlabel('Episode', fontsize=20)
+    plt.ylabel('Loss', fontsize=20)
+    plt.legend(loc='lower right')
+    plt.grid()
+    plt.show()
 
 
 def main():
-    is_fork = multiprocessing.get_start_method() == "fork"
-    device = (
-        torch.device(0)
-        if torch.cuda.is_available() and not is_fork
-        else torch.device("cpu")
-    )
-
-    # --- hyperparameters
-
-    num_cells = 256  # number of cells in each layer i.e. output dim.
-    lr = 3e-4
-    max_grad_norm = 1.0
-
-    # --- data collection parameters
-
-    frames_per_batch = 1000
-    # For a complete training, bring the number of frames up to 1M
-    total_frames = 50_000
-
-    # --- ppo parameters
- 
-    sub_batch_size = 64  # cardinality of the sub-samples gathered from the current data in the inner loop
-    num_epochs = 10  # optimization steps per batch of data collected
-    clip_epsilon = (
-        0.2  # clip value for PPO loss: see the equation in the intro for more context.
-    )
-    gamma = 0.99
-    lmbda = 0.95
-    entropy_eps = 1e-4
-
-    # --- define environment
-
-    base_env = GymEnv(LUNAR_LANDER, device=device)
-
-    env = TransformedEnv(
-        base_env,
-        Compose(
-            # normalize observations
-            ObservationNorm(in_keys=["observation"]),
-            DoubleToFloat(),
-            StepCounter(),
-        ),
-    )
-
-    env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
-
-    print("normalization constant shape:", env.transform[0].loc.shape)
 
 
-    print("observation_spec:", env.observation_spec)
-    print("reward_spec:", env.reward_spec)
-    print("input_spec:", env.input_spec)
-    print("action_spec (as defined by input_spec):", env.action_spec)
+    # initialize the environment
+    env = Env(LUNAR_LANDER)
 
+    # hyperparameters
+    MAX_EPISODES = 100
+    DISCOUNT_FACTOR = 0.99
+    REWARD_THRESHOLD = 475
+    PRINT_INTERVAL = 10
+    PPO_STEPS = 8
+    N_TRIALS = 100
+    EPSILON = 0.2
+    ENTROPY_COEFFICIENT = 0.01
+    HIDDEN_DIMENSIONS = 64
+    DROPOUT = 0.2
+    LEARNING_RATE = 0.001
+    train_rewards = []
+    policy_losses = []
+    value_losses = []
 
-    check_env_specs(env)
+    actor = PPO(HIDDEN_DIMENSIONS, *env.get_space(), DROPOUT)
+    critic = PPO(HIDDEN_DIMENSIONS, *env.get_space(), DROPOUT)
 
-    rollout = env.rollout(3)
-    print("rollout of three steps:", rollout)
-    print("Shape of the rollout TensorDict:", rollout.batch_size)
+    agent = ActorCritic(actor, critic)
 
-    # --- policy
+    optimizer = optim.Adam(agent.parameters(), lr=LEARNING_RATE)
 
-    actor = PPO(num_cells, 8, env.action_spec.shape[-1])
-    # actor_net = nn.Sequential(
-    #     nn.LazyLinear(num_cells, device=device),
-    #     nn.Tanh(),
-    #     nn.LazyLinear(num_cells, device=device),
-    #     nn.Tanh(),
-    #     nn.LazyLinear(num_cells, device=device),
-    #     nn.Tanh(),
-    #     nn.LazyLinear(2 * env.action_spec.shape[-1], device=device),
-    #     NormalParamExtractor(),
-    # )
-
-    policy_module = TensorDictModule(
-        actor.net, in_keys=["observation"], out_keys=["loc", "scale"]
-    )
-
-    policy_module = ProbabilisticActor(
-        module=policy_module,
-        spec=env.action_spec,
-        in_keys=["loc", "scale"],
-        distribution_class=TanhNormal,
-        distribution_kwargs={
-            "min": 0,
-            "max": env.action_spec.n,
-        },
-        return_log_prob=True,
-        # we'll need the log-prob for the numerator of the importance weights
-    )
-
-    # --- value network
-
-    value_net = nn.Sequential(
-        nn.LazyLinear(num_cells, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(num_cells, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(num_cells, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(1, device=device),
-    )
-
-    value_module = ValueOperator(
-        module=value_net,
-        in_keys=["observation"],
-    )
-
-    print("Running policy:", policy_module(env.reset()))
-    print("Running value:", value_module(env.reset()))
-
-    # --- data collector
-
-    collector = SyncDataCollector(
-        env,
-        policy_module,
-        frames_per_batch=frames_per_batch,
-        total_frames=total_frames,
-        split_trajs=False,
-        device=device,
-    )
-
-    # --- replay buffer
-
-    replay_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(max_size=frames_per_batch),
-        sampler=SamplerWithoutReplacement(),
-    )
-
-    # --- loss function
-
-    advantage_module = GAE(
-        gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=True
-    )
-
-    loss_module = ClipPPOLoss(
-        actor_network=policy_module,
-        critic_network=value_module,
-        clip_epsilon=clip_epsilon,
-        entropy_bonus=bool(entropy_eps),
-        entropy_coef=entropy_eps,
-        # these keys match by default but we set this for completeness
-        critic_coef=1.0,
-        loss_critic_type="smooth_l1",
-    )
-
-    optim = torch.optim.Adam(loss_module.parameters(), lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optim, total_frames // frames_per_batch, 0.0
-    )
-
-    # --- training loop
-
-    logs = defaultdict(list)
-    pbar = tqdm(total=total_frames)
-    eval_str = ""
-
-    # We iterate over the collector until it reaches the total number of frames it was
-    # designed to collect:
-    for i, tensordict_data in enumerate(collector):
-        # we now have a batch of data to work with. Let's learn something from it.
-        for _ in range(num_epochs):
-            # We'll need an "advantage" signal to make PPO work.
-            # We re-compute it at each epoch as its value depends on the value
-            # network which is updated in the inner loop.
-            advantage_module(tensordict_data)
-            data_view = tensordict_data.reshape(-1)
-            replay_buffer.extend(data_view.cpu())
-            for _ in range(frames_per_batch // sub_batch_size):
-                subdata = replay_buffer.sample(sub_batch_size)
-                loss_vals = loss_module(subdata.to(device))
-                loss_value = (
-                    loss_vals["loss_objective"]
-                    + loss_vals["loss_critic"]
-                    + loss_vals["loss_entropy"]
-                )
-
-                # Optimization: backward, grad clipping and optimization step
-                loss_value.backward()
-                # this is not strictly mandatory but it's good practice to keep
-                # your gradient norm bounded
-                torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_grad_norm)
-                optim.step()
-                optim.zero_grad()
-
-        logs["reward"].append(tensordict_data["next", "reward"].mean().item())
-        pbar.update(tensordict_data.numel())
-        cum_reward_str = (
-            f"average reward={logs['reward'][-1]: 4.4f} (init={logs['reward'][0]: 4.4f})"
+    for episode in range(1, MAX_EPISODES+1):
+        print('epsiode:', episode)
+        train_reward, states, actions, act_log_prob, advantages, returns = forward_pass(
+            env,
+            agent,
+            DISCOUNT_FACTOR
         )
-        logs["step_count"].append(tensordict_data["step_count"].max().item())
-        stepcount_str = f"step count (max): {logs['step_count'][-1]}"
-        logs["lr"].append(optim.param_groups[0]["lr"])
-        lr_str = f"lr policy: {logs['lr'][-1]: 4.4f}"
-        if i % 10 == 0:
-            # We evaluate the policy once every 10 batches of data.
-            # Evaluation is rather simple: execute the policy without exploration
-            # (take the expected value of the action distribution) for a given
-            # number of steps (1000, which is our ``env`` horizon).
-            # The ``rollout`` method of the ``env`` can take a policy as argument:
-            # it will then execute this policy at each step.
-            with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
-                # execute a rollout with the trained policy
-                eval_rollout = env.rollout(1000, policy_module)
-                logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
-                logs["eval reward (sum)"].append(
-                    eval_rollout["next", "reward"].sum().item()
-                )
-                logs["eval step_count"].append(eval_rollout["step_count"].max().item())
-                eval_str = (
-                    f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
-                    f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
-                    f"eval step-count: {logs['eval step_count'][-1]}"
-                )
-                del eval_rollout
-        pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
 
-        # We're also using a learning rate scheduler. Like the gradient clipping,
-        # this is a nice-to-have but nothing necessary for PPO to work.
-        scheduler.step()
+        policy_loss, value_loss = update_policy(
+            agent,
+            states,
+            actions,
+            act_log_prob,
+            advantages,
+            returns,
+            optimizer,
+            PPO_STEPS,
+            EPSILON,
+            ENTROPY_COEFFICIENT
+        )
+        
+        policy_losses.append(policy_loss)
+        value_losses.append(value_loss)
 
-    # --- results
+        train_rewards.append(train_reward)
 
-
-    # save the trained weights
-    actor.save()
-    print('info: weights saved to file:', '\"' + str(actor.get_filename()) + '\"')
-
-
-    plt.figure(figsize=(10, 10))
-    plt.subplot(2, 2, 1)
-    plt.plot(logs["reward"])
-    plt.title("training rewards (average)")
-    plt.subplot(2, 2, 2)
-    plt.plot(logs["step_count"])
-    plt.title("Max step count (training)")
-    plt.subplot(2, 2, 3)
-    plt.plot(logs["eval reward (sum)"])
-    plt.title("Return (test)")
-    plt.subplot(2, 2, 4)
-    plt.plot(logs["eval step_count"])
-    plt.title("Max step count (test)")
-    plt.show()
-
+        pass
+    plot_train_rewards(train_rewards, REWARD_THRESHOLD)
+    plot_losses(policy_losses, value_losses)
     pass
 
 
