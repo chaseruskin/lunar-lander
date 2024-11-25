@@ -327,14 +327,14 @@ class LunarLander(gym.Env, EzPickle):
         self,
         *,
         seed: Optional[int] = None,
-        gravity: float = None,
         options: Optional[dict] = None,
     ):
         super().reset(seed=seed)
         self._destroy()
 
         # have the ability to change the gravity during a reset
-        if gravity != None:
+        if 'gravity' in options:
+            gravity = float(options['gravity'])
             assert (
                 -12.0 < gravity and gravity < 0.0
             ), f"gravity (current value: {gravity}) must be between -12 and 0"

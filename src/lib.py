@@ -29,11 +29,11 @@ class Env:
         """
         return (self.env.observation_space.shape[0], self.env.action_space.n)
     
-    def reset(self):
+    def reset(self, gravity: float=None):
         """
         Initialize the environment.
         """
-        return self.env.reset()
+        return self.env.reset(options={'gravity': gravity})
     
     def step(self, action):
         """
