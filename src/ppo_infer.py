@@ -2,6 +2,7 @@
 
 import warnings
 warnings.filterwarnings("ignore")
+from torch import multiprocessing
 
 from models import PPO
 from tensordict.nn import TensorDictModule
@@ -10,7 +11,7 @@ import torch
 from torchrl.envs import (Compose, DoubleToFloat, ObservationNorm, StepCounter,
                           TransformedEnv)
 
-from lib import Env, Agent, LUNAR_LANDER
+from lib import Env, Agent, LUNAR_LANDER, LUNAR_LANDER_GYM
 
 def run_episode(env: Env, agent: Agent):
     """
@@ -34,20 +35,27 @@ def run_episode(env: Env, agent: Agent):
 def main():
     num_cells = 256
     # determine the environment
-    env = Env(LUNAR_LANDER, 'human')
+    env = Env(LUNAR_LANDER_GYM, 'human')
 
-    spec = TransformedEnv(
-        env.env,
-        Compose(
-            # normalize observations
-            ObservationNorm(in_keys=["observation"]),
-            DoubleToFloat(),
-            StepCounter(),
-        ),
-    ).action_spec
+    is_fork = multiprocessing.get_start_method() == "fork"
+    device = (
+        torch.device(0)
+        if torch.cuda.is_available() and not is_fork
+        else torch.device("cpu")
+    )
+
+    # spec = TransformedEnv(
+    #     env.env,
+    #     Compose(
+    #         # normalize observations
+    #         ObservationNorm(in_keys=["observation"]),
+    #         DoubleToFloat(),
+    #         StepCounter(),
+    #     ),
+    # ).action_spec
 
     # create the model
-    model = PPO(num_cells, *env.get_space())
+    model = PPO(num_cells, *env.get_space(), device=device)
     # initalize the agent
     agent = Agent(model, weights='weights/ppo_8x256x256x256x4.pth')
 
@@ -55,18 +63,18 @@ def main():
         model.net, in_keys=["observation"], out_keys=["loc", "scale"]
     )
 
-    policy_module = ProbabilisticActor(
-        module=policy_module,
-        spec=spec,
-        in_keys=["loc", "scale"],
-        distribution_class=TanhNormal,
-        distribution_kwargs={
-            "min": 0,
-            "max": spec.n,
-        },
-        return_log_prob=True,
-        # we'll need the log-prob for the numerator of the importance weights
-    )
+    # policy_module = ProbabilisticActor(
+    #     module=policy_module,
+    #     spec=spec,
+    #     in_keys=["loc", "scale"],
+    #     distribution_class=TanhNormal,
+    #     distribution_kwargs={
+    #         "min": 0,
+    #         "max": spec.n,
+    #     },
+    #     return_log_prob=True,
+    #     # we'll need the log-prob for the numerator of the importance weights
+    # )
     
     # run an episode
     rewards = []
