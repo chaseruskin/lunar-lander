@@ -3,6 +3,8 @@
 from models import DQN
 import torch
 from lib import Env, Agent, LUNAR_LANDER
+import gymnasium as gym
+from lunar_lander import LunarLander
 
 def run_episode(env: Env, agent: Agent):
     """
@@ -24,8 +26,9 @@ def run_episode(env: Env, agent: Agent):
 
 
 def main():
+    render = 'human'
     # determine the environment
-    env = Env(LUNAR_LANDER, None)
+    env = Env(LUNAR_LANDER, render)
     # create the model
     model = DQN(*env.get_space())
     # initalize the agent
@@ -33,7 +36,7 @@ def main():
     # run an episode
     rewards = []
     avg = 0.0
-    TRIALS = 1000
+    TRIALS = 1
     for i in range(TRIALS):
         reward = run_episode(env, agent)
         rewards += [reward]
@@ -41,7 +44,6 @@ def main():
         avg += reward
 
     print('average:', avg/TRIALS)
-
 
     with open("output/rewards.txt", 'w') as fd:
         for i in rewards:

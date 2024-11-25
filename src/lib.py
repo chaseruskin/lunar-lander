@@ -3,16 +3,23 @@
 import gymnasium as gym
 import torch
 from models import Model
+from lunar_lander import LunarLander
 
+# The custom environment
+LUNAR_LANDER: str = 'cse592/LunarLander'
 
-LUNAR_LANDER: str = 'LunarLander-v3'
+# The old environment (directly from `gymnasium`)
+LUNAR_LANDER_GYM: str = 'LunarLander-v3'
 
 class Env:
+
+    _initialized = False
 
     def __init__(self, name: str, render: str=None):
         """
         Configure an enviroment through Gymnasium.
         """
+        Env.register_custom()
         self.env = gym.make(name, render_mode=render)
 
     def get_space(self):
@@ -33,6 +40,17 @@ class Env:
         Update the environment based on the agent's `action`.
         """
         return self.env.step(action)
+    
+    @staticmethod
+    def register_custom():
+        if Env._initialized == False:
+            # register our custom environment
+            gym.register(
+                id=LUNAR_LANDER,
+                entry_point=LunarLander,
+            )
+            Env._initialized = True
+        pass
 
 
 class Agent:
@@ -75,5 +93,3 @@ class Agent:
             sel = sel[0]
         action = sel.argmax().item()
         return action
-
-    pass
