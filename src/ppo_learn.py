@@ -45,7 +45,7 @@ def main():
 
     frames_per_batch = 1000
     # For a complete training, bring the number of frames up to 1M
-    total_frames = 50_000
+    total_frames = 500_000
 
     # --- ppo parameters
  
