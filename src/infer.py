@@ -14,7 +14,7 @@ def run_episode(env: Env, agent: Agent):
     # record data about the episode over its duration
     t_reward = 0
 
-    obs, info = env.reset()
+    obs, info = env.reset(gravity=-10.0)
     with torch.no_grad():
         while not episode_over:
             action = agent.select_action(obs)

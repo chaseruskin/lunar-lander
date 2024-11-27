@@ -115,7 +115,7 @@ class Trainer:
 
         for i_episode in range(n):
             # Initialize the environment and get its state
-            state, info = self.env.reset()
+            state, info = self.env.reset(gravity=-10.0)
             
             i_reward = 0
             state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)

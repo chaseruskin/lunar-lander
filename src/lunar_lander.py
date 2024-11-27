@@ -333,7 +333,7 @@ class LunarLander(gym.Env, EzPickle):
         self._destroy()
 
         # have the ability to change the gravity during a reset
-        if 'gravity' in options:
+        if 'gravity' in options and options['gravity'] != None:
             gravity = float(options['gravity'])
             assert (
                 -12.0 < gravity and gravity < 0.0
@@ -387,6 +387,10 @@ class LunarLander(gym.Env, EzPickle):
         # Randomize the starting x position using a normal distribution centered around the middle of the screen
         initial_x = self.np_random.normal(loc=((VIEWPORT_W / SCALE) / 2), scale=((VIEWPORT_W / SCALE) / 4))
 
+        # make sure the initial x does not go off the screen
+        initial_x = 0 if initial_x < 0 else initial_x
+        initial_x = (VIEWPORT_W / SCALE) if initial_x > (VIEWPORT_W / SCALE) else initial_x
+        
         self.lander = self.world.CreateDynamicBody(
             position=(initial_x, initial_y),
             angle=0.0,
