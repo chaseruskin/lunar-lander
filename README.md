@@ -31,16 +31,28 @@ python src/main.py
 
 ## Usage
 
-To train the model:
+To train the DQN model:
 
 ```
 python src/learn.py
 ```
 
-To see the trained model run inference:
+To train the PPO model:
+
+```
+python src/ppo_learn.py
+```
+
+To see the trained DQN model run inference:
 
 ```
 python src/infer.py
+```
+
+To see the trained PPO model run inference:
+
+```
+python src/ppo_infer.py
 ```
 
 To manually maneuver the lander using the keyboard:
