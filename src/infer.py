@@ -3,8 +3,6 @@
 from models import DQN
 import torch
 from lib import Env, Agent, LUNAR_LANDER
-import gymnasium as gym
-from lunar_lander import LunarLander
 
 def run_episode(env: Env, agent: Agent):
     """
@@ -14,7 +12,7 @@ def run_episode(env: Env, agent: Agent):
     # record data about the episode over its duration
     t_reward = 0
 
-    obs, info = env.reset(gravity=-10.0)
+    obs, info = env.reset()
     with torch.no_grad():
         while not episode_over:
             action = agent.select_action(obs)
@@ -36,7 +34,7 @@ def main():
     # run an episode
     rewards = []
     avg = 0.0
-    TRIALS = 1
+    TRIALS = 3
     for i in range(TRIALS):
         reward = run_episode(env, agent)
         rewards += [reward]

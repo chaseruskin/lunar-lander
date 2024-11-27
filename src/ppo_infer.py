@@ -34,6 +34,7 @@ def run_episode(env: Env, agent: Agent):
 
 
 def main():
+    render_mode = None # 'human' # 
     num_cells = 256
 
     is_fork = multiprocessing.get_start_method() == "fork"
@@ -43,7 +44,7 @@ def main():
         else torch.device("cpu")
     )
 
-    env = Env(LUNAR_LANDER, render=None, device=device, continuous=True, use_ppo=True)
+    env = Env(LUNAR_LANDER, render=render_mode, device=device, continuous=True, use_ppo=True)
 
     env.env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
 
@@ -51,7 +52,7 @@ def main():
     print("rollout of three steps:", rollout)
     print("Shape of the rollout TensorDict:", rollout.batch_size)
 
-    # initialize the agent
+    # recreate the model
     model = PPO(num_cells, 2*env.env.action_spec.shape[-1], device=device)
 
     # initalize the agent
@@ -60,6 +61,8 @@ def main():
     policy_module = TensorDictModule(
         agent.model.net, in_keys=["observation"], out_keys=["loc", "scale"]
     )
+
+    policy_module(env.reset())
 
     policy_module = ProbabilisticActor(
         module=policy_module,
@@ -73,8 +76,6 @@ def main():
         return_log_prob=True,
         # we'll need the log-prob for the numerator of the importance weights
     )
-
-    policy_module(env.reset())
 
     rewards = []
     avg = 0.0

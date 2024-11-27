@@ -333,12 +333,15 @@ class LunarLander(gym.Env, EzPickle):
         self._destroy()
 
         # have the ability to change the gravity during a reset
-        if options != None and 'gravity' in options and options['gravity'] != None:
-            gravity = float(options['gravity'])
-            assert (
-                -12.0 < gravity and gravity < 0.0
-            ), f"gravity (current value: {gravity}) must be between -12 and 0"
-            self.gravity = gravity
+        gravity = self.np_random.normal(loc=-6, scale=2)
+        # clamp gravity value
+        gravity = -11.9 if gravity <= -12.0 else gravity
+        gravity = -0.1 if gravity >= 0.0 else gravity
+        
+        assert (
+            -12.0 < gravity and gravity < 0.0
+        ), f"gravity (current value: {gravity}) must be between -12 and 0"
+        self.gravity = gravity
 
         # Bug's workaround for: https://github.com/Farama-Foundation/Gymnasium/issues/728
         # Not sure why the self._destroy() is not enough to clean(reset) the total world environment elements, need more investigation on the root cause,
