@@ -4,6 +4,7 @@ import warnings
 warnings.filterwarnings("ignore")
 from torch import multiprocessing
 
+from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from models import PPO
 from tensordict.nn import TensorDictModule
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
@@ -34,8 +35,6 @@ def run_episode(env: Env, agent: Agent):
 
 def main():
     num_cells = 256
-    # determine the environment
-    env = Env(LUNAR_LANDER_GYM, 'human')
 
     is_fork = multiprocessing.get_start_method() == "fork"
     device = (
@@ -44,50 +43,59 @@ def main():
         else torch.device("cpu")
     )
 
-    # spec = TransformedEnv(
-    #     env.env,
-    #     Compose(
-    #         # normalize observations
-    #         ObservationNorm(in_keys=["observation"]),
-    #         DoubleToFloat(),
-    #         StepCounter(),
-    #     ),
-    # ).action_spec
+    env = Env(LUNAR_LANDER, render=None, device=device, continuous=True, use_ppo=True)
 
-    # create the model
-    model = PPO(num_cells, *env.get_space(), device=device)
+    env.env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
+
+    rollout = env.env.rollout(3)
+    print("rollout of three steps:", rollout)
+    print("Shape of the rollout TensorDict:", rollout.batch_size)
+
+    # initialize the agent
+    model = PPO(num_cells, 2*env.env.action_spec.shape[-1], device=device)
+
     # initalize the agent
     agent = Agent(model, weights='weights/ppo_8x256x256x256x4.pth')
 
     policy_module = TensorDictModule(
-        model.net, in_keys=["observation"], out_keys=["loc", "scale"]
+        agent.model.net, in_keys=["observation"], out_keys=["loc", "scale"]
     )
 
-    # policy_module = ProbabilisticActor(
-    #     module=policy_module,
-    #     spec=spec,
-    #     in_keys=["loc", "scale"],
-    #     distribution_class=TanhNormal,
-    #     distribution_kwargs={
-    #         "min": 0,
-    #         "max": spec.n,
-    #     },
-    #     return_log_prob=True,
-    #     # we'll need the log-prob for the numerator of the importance weights
-    # )
-    
-    # run an episode
+    policy_module = ProbabilisticActor(
+        module=policy_module,
+        spec=env.env.action_spec,
+        in_keys=["loc", "scale"],
+        distribution_class=TanhNormal,
+        distribution_kwargs={
+            "min": env.env.action_spec.space.low,
+            "max": env.env.action_spec.space.high,
+        },
+        return_log_prob=True,
+        # we'll need the log-prob for the numerator of the importance weights
+    )
+
+    policy_module(env.reset())
+
     rewards = []
     avg = 0.0
+
     TRIALS = 2
+
+    # create the model
     for i in range(TRIALS):
-        reward = run_episode(env, agent)
-        rewards += [reward]
-        print('episode:', i, 'reward:', reward)
-        avg += reward
+        env.reset()
+        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
+            # execute a rollout with the trained policy
+            eval_rollout = env.env.rollout(1000, policy_module)
+            print('eval reward:', eval_rollout["next", "reward"].mean().item())
+            print('eval reward (sum):', eval_rollout["next", "reward"].sum().item())
+            print('eval step_count:', eval_rollout["step_count"].max().item())
+            rewards += [eval_rollout['next', 'reward'].sum().item()]
+            avg += rewards[-1]
+            del eval_rollout
+        pass
 
     print('average:', avg/TRIALS)
-
 
     with open("output/ppo_rewards.txt", 'w') as fd:
         for i in rewards:

@@ -98,24 +98,34 @@ class DQN(Model):
 
 class PPO(Model):
 
-    def __init__(self, num_cells: int, n_observations: int, n_actions: int, device):
+    def __init__(self, num_cells: int, n_outputs: int, device, is_target: bool=False):
         super(PPO, self).__init__()
         self.name = 'ppo'
         # self.layer1 = nn.Linear(n_observations, 256)
         # self.layer2 = nn.Linear(256, 256)
         # self.layer3 = nn.Linear(256, 256)
         # self.layer4 = nn.Linear(256, n_actions)
-        
-        self.net = nn.Sequential(
-            nn.LazyLinear(num_cells, device=device),
-            nn.Tanh(),
-            nn.LazyLinear(num_cells, device=device),
-            nn.Tanh(),
-            nn.LazyLinear(num_cells, device=device),
-            nn.Tanh(),
-            nn.LazyLinear(2*n_actions, device=device),
-            NormalParamExtractor(),
-        )
+        if is_target == False:
+            self.net = nn.Sequential(
+                nn.LazyLinear(num_cells, device=device),
+                nn.Tanh(),
+                nn.LazyLinear(num_cells, device=device),
+                nn.Tanh(),
+                nn.LazyLinear(num_cells, device=device),
+                nn.Tanh(),
+                nn.LazyLinear(n_outputs, device=device),
+                NormalParamExtractor(),
+            )
+        else:
+            self.net = nn.Sequential(
+                nn.LazyLinear(num_cells, device=device),
+                nn.Tanh(),
+                nn.LazyLinear(num_cells, device=device),
+                nn.Tanh(),
+                nn.LazyLinear(num_cells, device=device),
+                nn.Tanh(),
+                nn.LazyLinear(n_outputs, device=device),
+            )
         pass
 
     def forward(self, x):

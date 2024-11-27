@@ -4,6 +4,10 @@ import gymnasium as gym
 import torch
 from models import Model
 from lunar_lander import LunarLander
+from torchrl.envs.libs.gym import GymEnv
+
+from torchrl.envs import (Compose, DoubleToFloat, ObservationNorm, StepCounter,
+                          TransformedEnv)
 
 # The custom environment
 LUNAR_LANDER: str = 'cse592/LunarLander'
@@ -15,12 +19,25 @@ class Env:
 
     _initialized = False
 
-    def __init__(self, name: str, render: str=None):
+    def __init__(self, name: str, render: str=None, continuous: bool=False, device: str=None, use_ppo: bool=False):
         """
         Configure an enviroment through Gymnasium.
         """
         Env.register_custom()
-        self.env = gym.make(name, render_mode=render)
+        self.env = gym.make(name, render_mode=render, continuous=continuous)
+        if use_ppo == True:
+            ppo_env = GymEnv(name, render_mode=render, device=device, continuous=continuous)
+            transform_env = TransformedEnv(
+                ppo_env,
+                Compose(
+                    # normalize observations
+                    ObservationNorm(in_keys=["observation"]),
+                    DoubleToFloat(),
+                    StepCounter(),
+                ),
+            )
+            self.env = transform_env
+        pass
 
     def get_space(self):
         """

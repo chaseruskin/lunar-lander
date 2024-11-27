@@ -25,7 +25,7 @@ from tqdm import tqdm
 
 from lib import LUNAR_LANDER, LUNAR_LANDER_GYM
 from models import PPO
-
+from lib import Env
 
 def main():
     is_fork = multiprocessing.get_start_method() == "fork"
@@ -60,48 +60,26 @@ def main():
 
     # --- define environment
 
-    base_env = GymEnv(LUNAR_LANDER_GYM, device=device, continuous=True)
+    env = Env(LUNAR_LANDER, render=None, device=device, continuous=True, use_ppo=True)
 
-    env = TransformedEnv(
-        base_env,
-        Compose(
-            # normalize observations
-            ObservationNorm(in_keys=["observation"]),
-            DoubleToFloat(),
-            StepCounter(),
-        ),
-    )
+    env.env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
 
-    env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
+    print("normalization constant shape:", env.env.transform[0].loc.shape)
 
-    print("normalization constant shape:", env.transform[0].loc.shape)
+    print("observation_spec:", env.env.observation_spec)
+    print("reward_spec:", env.env.reward_spec)
+    print("input_spec:", env.env.input_spec)
+    print("action_spec (as defined by input_spec):", env.env.action_spec)
 
+    check_env_specs(env.env)
 
-    print("observation_spec:", env.observation_spec)
-    print("reward_spec:", env.reward_spec)
-    print("input_spec:", env.input_spec)
-    print("action_spec (as defined by input_spec):", env.action_spec)
-
-
-    check_env_specs(env)
-
-    rollout = env.rollout(3)
+    rollout = env.env.rollout(3)
     print("rollout of three steps:", rollout)
     print("Shape of the rollout TensorDict:", rollout.batch_size)
 
     # --- policy
 
-    actor = PPO(num_cells, 8, env.action_spec.shape[-1], device=device)
-    # actor_net = nn.Sequential(
-    #     nn.LazyLinear(num_cells, device=device),
-    #     nn.Tanh(),
-    #     nn.LazyLinear(num_cells, device=device),
-    #     nn.Tanh(),
-    #     nn.LazyLinear(num_cells, device=device),
-    #     nn.Tanh(),
-    #     nn.LazyLinear(2 * env.action_spec.shape[-1], device=device),
-    #     NormalParamExtractor(),
-    # )
+    actor = PPO(num_cells, 2*env.env.action_spec.shape[-1], device=device)
 
     policy_module = TensorDictModule(
         actor.net, in_keys=["observation"], out_keys=["loc", "scale"]
@@ -109,12 +87,12 @@ def main():
 
     policy_module = ProbabilisticActor(
         module=policy_module,
-        spec=env.action_spec,
+        spec=env.env.action_spec,
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": env.action_spec.space.low,
-            "max": env.action_spec.space.high,
+            "min": env.env.action_spec.space.low,
+            "max": env.env.action_spec.space.high,
         },
         return_log_prob=True,
         # we'll need the log-prob for the numerator of the importance weights
@@ -122,28 +100,20 @@ def main():
 
     # --- value network
 
-    value_net = nn.Sequential(
-        nn.LazyLinear(num_cells, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(num_cells, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(num_cells, device=device),
-        nn.Tanh(),
-        nn.LazyLinear(1, device=device),
-    )
+    target = PPO(num_cells, 1, device=device, is_target=True)
 
     value_module = ValueOperator(
-        module=value_net,
+        module=target.net,
         in_keys=["observation"],
     )
 
-    print("Running policy:", policy_module(env.reset()))
-    print("Running value:", value_module(env.reset()))
+    policy_module(env.reset())
+    value_module(env.reset())
 
     # --- data collector
 
     collector = SyncDataCollector(
-        env,
+        env.env,
         policy_module,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -223,6 +193,7 @@ def main():
         stepcount_str = f"step count (max): {logs['step_count'][-1]}"
         logs["lr"].append(optim.param_groups[0]["lr"])
         lr_str = f"lr policy: {logs['lr'][-1]: 4.4f}"
+        # this is running "inference"
         if i % 10 == 0:
             # We evaluate the policy once every 10 batches of data.
             # Evaluation is rather simple: execute the policy without exploration
@@ -232,7 +203,7 @@ def main():
             # it will then execute this policy at each step.
             with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
                 # execute a rollout with the trained policy
-                eval_rollout = env.rollout(1000, policy_module)
+                eval_rollout = env.env.rollout(1000, policy_module)
                 logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
                 logs["eval reward (sum)"].append(
                     eval_rollout["next", "reward"].sum().item()
@@ -252,11 +223,9 @@ def main():
 
     # --- results
 
-
     # save the trained weights
     actor.save()
     print('info: weights saved to file:', '\"' + str(actor.get_filename()) + '\"')
-
 
     plt.figure(figsize=(10, 10))
     plt.subplot(2, 2, 1)
