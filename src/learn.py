@@ -108,7 +108,11 @@ class Trainer:
 
     def train(self, n: int):
         """
-        Undergo training for `n` episodes.
+        Undergo training for `n` episodes using the Adam optimizer and a replay
+        buffer.
+
+        After all the episodes have finished, return the final model representing
+        the policy.
         """
 
         optimizer = optim.AdamW(self.policy.parameters(), lr=self.hp.LR, amsgrad=True)
@@ -158,7 +162,6 @@ class Trainer:
                         self.plot_rewards()
                     break
             print('episode:', i_episode, 'reward:', i_reward)
-            pass
         return self.policy
 
     def select_action(self, state):

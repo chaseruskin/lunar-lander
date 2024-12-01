@@ -24,7 +24,7 @@ class Env:
         Configure an enviroment through Gymnasium.
         """
         Env.register_custom()
-        self.env = gym.make(name, render_mode=render, continuous=continuous)
+        self.env = gym.make(name, render_mode=render, continuous=continuous, max_episode_steps=10_000)
         if use_ppo == True:
             ppo_env = GymEnv(name, render_mode=render, device=device, continuous=continuous)
             transform_env = TransformedEnv(

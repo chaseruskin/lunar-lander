@@ -6,7 +6,8 @@ from lib import Env, Agent, LUNAR_LANDER
 
 def run_episode(env: Env, agent: Agent):
     """
-    Runs a single episode for the agent `agent` interacting within the environment `env`.
+    Runs a single episode for the agent `agent` interacting within the 
+    environment `env`.
     """
     episode_over = False
     # record data about the episode over its duration
