@@ -24,7 +24,7 @@ def run_episode(env: Env, agent: Agent):
 
 
 def main():
-    render = 'human'
+    render = None # 'human'
     # determine the environment
     env = Env(LUNAR_LANDER, render)
     # create the model
@@ -34,7 +34,7 @@ def main():
     # run an episode
     rewards = []
     avg = 0.0
-    TRIALS = 3
+    TRIALS = 1000
     for i in range(TRIALS):
         reward = run_episode(env, agent)
         rewards += [reward]

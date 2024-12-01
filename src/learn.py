@@ -116,7 +116,7 @@ class Trainer:
 
         for i_episode in range(n):
             # Initialize the environment and get its state
-            state, info = self.env.reset(gravity=np.random.uniform(-10.0, -1.0))
+            state, info = self.env.reset()
             
             i_reward = 0
             state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
@@ -281,7 +281,7 @@ class Trainer:
 def main():    
     # determine how long we should train for
     if torch.cuda.is_available() or torch.backends.mps.is_available():
-        episodes = 1000
+        episodes = 1500
     else:
         episodes = 10
 

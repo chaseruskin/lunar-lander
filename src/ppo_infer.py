@@ -34,7 +34,7 @@ def run_episode(env: Env, agent: Agent):
 
 
 def main():
-    render_mode = None # 'human' # 
+    render_mode = 'human' # 
     num_cells = 256
 
     is_fork = multiprocessing.get_start_method() == "fork"
@@ -44,7 +44,7 @@ def main():
         else torch.device("cpu")
     )
 
-    env = Env(LUNAR_LANDER, render=render_mode, device=device, continuous=True, use_ppo=True)
+    env = Env(LUNAR_LANDER_GYM, render=render_mode, device=device, continuous=True, use_ppo=True)
 
     env.env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
 
