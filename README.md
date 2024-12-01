@@ -13,6 +13,26 @@ The project is organized as follows:
 - `/data`: Plots and statistics regarding our experiments (tracked)
 - `/weights`: Saved weight parameters from trained networks (tracked)
 
+## System
+
+### Environment
+
+The environment is encapsulated in the `Env` class and uses a registered
+
+![](./data/env.svg)
+
+### Training
+
+The training loop uses our `Trainer` class and the `train()` method to train the DQN model using a policy network and a target network. The training occurs for `n` episodes, and utilizes the Adam optimzer and a replay memory.
+
+![](./data/system_train.svg)
+
+When training is finished, the program saves the weights it learned for the policy network to the `/weights` folder for future use.
+
+### Inference
+
+![](./data/system_infer.svg)
+
 ## Getting Started
 
 This project has been tested using Python >= 3.8.6. 

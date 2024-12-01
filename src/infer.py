@@ -14,6 +14,7 @@ def run_episode(env: Env, agent: Agent):
     t_reward = 0
 
     obs, info = env.reset()
+    gravity = info['gravity']
     with torch.no_grad():
         while not episode_over:
             action = agent.select_action(obs)
@@ -21,7 +22,7 @@ def run_episode(env: Env, agent: Agent):
             # accumulate the reward over the episode's duration
             t_reward += reward
             episode_over = terminated or truncated
-    return t_reward
+    return t_reward, gravity
 
 
 def main():
@@ -34,10 +35,12 @@ def main():
     agent = Agent(model, weights='weights/dqn_8x256x256x256x4_gunifrom_10_6_600.pth')
     # run an episode
     rewards = []
+    gravitys = []
     avg = 0.0
     TRIALS = 1000
     for i in range(TRIALS):
-        reward = run_episode(env, agent)
+        reward, gravity = run_episode(env, agent)
+        gravitys += [gravity]
         rewards += [reward]
         print('episode:', i, 'reward:', reward)
         avg += reward
@@ -46,6 +49,10 @@ def main():
 
     with open("output/rewards.txt", 'w') as fd:
         for i in rewards:
+            fd.write(str(i) + '\n')
+
+    with open("output/gravitys.txt", 'w') as fd:
+        for i in gravitys:
             fd.write(str(i) + '\n')
     pass
 
