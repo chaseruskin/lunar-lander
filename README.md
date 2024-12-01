@@ -51,11 +51,13 @@ This project has been tested using Python >= 3.8.6.
 pip install -r requirements.txt
 ```
 
-2. Run our experiment:
+2. Run a script:
 
 ```
-python src/main.py
+python <script> [options]
 ```
+
+Where `<script>` is one of the possible Python scripts and `[options]` are any optional arguments if supported.
 
 ## Usage
 
