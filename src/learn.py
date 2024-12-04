@@ -284,7 +284,7 @@ class Trainer:
 def main():    
     # determine how long we should train for
     if torch.cuda.is_available() or torch.backends.mps.is_available():
-        episodes = 1500
+        episodes = 600
     else:
         episodes = 10
 

@@ -45,7 +45,7 @@ class Model(nn.Module):
         """
         Returns the file name of the given model.
         """
-        return 'weights' + '/' + self.get_name() + "_gunifrom_10_4_1500.pth"
+        return 'weights' + '/' + self.get_name() + "_gunifrom_10_6_600.pth"
     
     def save(self):
         """
@@ -73,12 +73,12 @@ class DQN(Model):
         super(DQN, self).__init__()
         self.name = 'dqn'
 
-        self.layer1 = nn.Linear(n_observations, 256)
-        self.layer2 = nn.Linear(256, 256)
-        self.layer3 = nn.Linear(256, 256)
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, 128)
         # self.layer4 = nn.Linear(512, 512)
         # self.layer5 = nn.Linear(512, 512)
-        self.layer4 = nn.Linear(256, n_actions)
+        self.layer4 = nn.Linear(128, n_actions)
         pass
          
     def forward(self, x):

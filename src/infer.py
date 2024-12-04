@@ -32,7 +32,7 @@ def main():
     # create the model
     model = DQN(*env.get_space())
     # initalize the agent
-    agent = Agent(model, weights='weights/dqn_8x256x256x256x4_gunifrom_10_6_600.pth')
+    agent = Agent(model, weights='weights/dqn_8x128x128x128x4_gunifrom_10_6_600.pth')
     # run an episode
     rewards = []
     gravitys = []

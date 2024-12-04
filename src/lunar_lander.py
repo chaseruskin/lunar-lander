@@ -333,7 +333,7 @@ class LunarLander(gym.Env, EzPickle):
         self._destroy()
 
         # have the ability to change the gravity during a reset
-        gravity = self.np_random.uniform(-10.0, -1.0)
+        gravity = self.np_random.uniform(-10.0, -6.0)
         # clamp gravity value
         gravity = -11.9 if gravity <= -12.0 else gravity
         gravity = -0.1 if gravity >= 0.0 else gravity
