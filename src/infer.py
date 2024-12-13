@@ -2,7 +2,7 @@
 
 from models import DQN
 import torch
-from lib import Env, Agent, LUNAR_LANDER
+from lib import Env, Agent, LUNAR_LANDER, LUNAR_LANDER_GYM
 
 def run_episode(env: Env, agent: Agent):
     """
@@ -32,9 +32,9 @@ def main():
     # create the model
     model = DQN(*env.get_space())
     # initalize the agent
-    agent = Agent(model, weights='weights/dqn_8x128x128x128x4_gunifrom_10_6_600.pth')
+    agent = Agent(model, weights='weights/dqn_8x128x128x4.pth')
     # run an episode
-    rewards = []
+    rewards = [] 
     gravitys = []
     avg = 0.0
     TRIALS = 1000
